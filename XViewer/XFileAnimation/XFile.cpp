@@ -86,12 +86,13 @@ D3DXVECTOR3 CXFile::GetInitialCameraPosition() const
 
 // 设置骨骼矩阵
 void CXFile::SetupBoneMatrices(D3DXFRAME_EXTENDED *pFrame, LPD3DXMATRIX pParentMatrix) {
-	// Cast to our extended structure first
+
+	// 这里是指针赋值，pMesh后来被赋值给m_firstMesh，也就是说m_firstMesh一直指着骨骼帧的网格容器。
 	D3DXMESHCONTAINER_EXTENDED* pMesh = (D3DXMESHCONTAINER_EXTENDED*)pFrame->pMeshContainer;
 
 	// 如果有网格
 	if(pMesh) {
-		// 记录最初的网格
+		// 记录网格
 		if(!m_firstMesh)
 			m_firstMesh = pMesh;
 		
@@ -134,15 +135,16 @@ void CXFile::SetupBoneMatrices(D3DXFRAME_EXTENDED *pFrame, LPD3DXMATRIX pParentM
 
 
 // 根据时间更新帧
-void CXFile::FrameMove(float elapsedTime,const D3DXMATRIX *matWorld) {
+void CXFile::FrameMove(float elapsedTime,D3DXMATRIX *matWorld) {
+
 	// 调整当前动画的时间点
     if (m_animController != NULL)
         m_animController->AdvanceTime(elapsedTime, NULL);
-
+	
 	m_currentTime+= elapsedTime;
 
-	// 更新矩阵
-    UpdateFrameMatrices(m_frameRoot, matWorld);
+	// 更新m_frameRoot链表
+    UpdateFrameMatrices(m_frameRoot, matWorld, m_aimeRun, NULL);
 
 	// 如果有蒙皮
 	D3DXMESHCONTAINER_EXTENDED* pMesh = m_firstMesh;
@@ -150,9 +152,10 @@ void CXFile::FrameMove(float elapsedTime,const D3DXMATRIX *matWorld) {
 		// 更新顶点
 		unsigned int Bones = pMesh->pSkinInfo->GetNumBones();
 
-		// 计算骨骼矩阵
-		for (unsigned int i = 0; i < Bones; ++i)
+		// 更新m_boneMatrices数组
+		for (unsigned int i = 0; i < Bones; ++i) {
 			D3DXMatrixMultiply(&m_boneMatrices[i],&pMesh->exBoneOffsets[i], pMesh->exFrameCombinedMatrixPointer[i]);
+		}
 
 		// 锁定顶点缓冲区
 		void *srcPtr = 0;
@@ -161,7 +164,7 @@ void CXFile::FrameMove(float elapsedTime,const D3DXMATRIX *matWorld) {
 		void *destPtr = 0;
 		pMesh->exSkinMesh->LockVertexBuffer(0, (void**)&destPtr);
 
-		// 根据新的骨骼矩阵更新蒙皮网格
+		// 根据新的m_boneMatrices更新蒙皮网格
 		pMesh->pSkinInfo->UpdateSkinnedMesh(m_boneMatrices, NULL, srcPtr, destPtr);
 
 		// 解锁
@@ -172,35 +175,45 @@ void CXFile::FrameMove(float elapsedTime,const D3DXMATRIX *matWorld) {
 
 // 判断骨骼是否在暂停列表里
 bool CXFile::InPauseList(LPSTR name) {
+	if (name == NULL) return false;
 	if (strcmp(name, "TORSO") == 0) return true;
-	//else if (strcmp(name, "Neck") == 0) return true;
-	//else if (strcmp(name, "") == 0) return true;
+	//else if (strcmp(name, "L_arm_lowe") == 0) return true;
 	else return false;
 }
 
 // 更新骨骼矩阵
-void CXFile::UpdateFrameMatrices(const D3DXFRAME *frameBase, const D3DXMATRIX *parentMatrix) {
-    D3DXFRAME_EXTENDED *currentFrame = (D3DXFRAME_EXTENDED*)frameBase;
+void CXFile::UpdateFrameMatrices(const D3DXFRAME *frameBase, D3DXMATRIX *parentMatrix, bool update, D3DXMATRIX *pauseMatrix) {
+		D3DXFRAME_EXTENDED *currentFrame = (D3DXFRAME_EXTENDED*)frameBase;
+		// 如果当前骨骼帧在暂停列表里，并且当前为暂停状态
+		// 当前骨骼帧改为单位矩阵乘父节点矩阵
+		// 当前骨骼帧的子节点都停止计算
+		if (!update && InPauseList(currentFrame->Name)) {
+			// 计算骨骼的变化，如果有父节点要乘父节点的变换矩阵
+			if (parentMatrix != NULL)
+				D3DXMatrixMultiply(&currentFrame->exCombinedTransformationMatrix, D3DXMatrixIdentity(&currentFrame->TransformationMatrix), parentMatrix);
+			else
+				currentFrame->exCombinedTransformationMatrix = currentFrame->TransformationMatrix;
+			// 递归兄弟帧
+			if (currentFrame->pFrameSibling != NULL)
+				UpdateFrameMatrices(currentFrame->pFrameSibling, parentMatrix, update, NULL);
 
-	// 如果按下了暂停键，并且在这块骨骼暂停列表里，就不计算这块骨骼的矩阵
-	if (!m_aimeRun && currentFrame->Name != NULL && InPauseList(currentFrame->Name)) {
-		if (parentMatrix != NULL)
-			D3DXMatrixMultiply(&currentFrame->exCombinedTransformationMatrix, D3DXMatrixIdentity(&currentFrame->TransformationMatrix), parentMatrix);
-	} else {
-		// 计算骨骼的变化，如果有父节点要乘父节点的变换矩阵
-		if (parentMatrix != NULL)
-			D3DXMatrixMultiply(&currentFrame->exCombinedTransformationMatrix, &currentFrame->TransformationMatrix, parentMatrix);
-		else
-			currentFrame->exCombinedTransformationMatrix = currentFrame->TransformationMatrix;
-	}
+			// 递归子帧
+			if (currentFrame->pFrameFirstChild != NULL)
+				UpdateFrameMatrices(currentFrame->pFrameFirstChild, &currentFrame->exCombinedTransformationMatrix, update, NULL);
+		} else {
+			// 计算骨骼的变化，如果有父节点要乘父节点的变换矩阵
+			if (parentMatrix != NULL)
+				D3DXMatrixMultiply(&currentFrame->exCombinedTransformationMatrix, &currentFrame->TransformationMatrix, parentMatrix);
+			else
+				currentFrame->exCombinedTransformationMatrix = currentFrame->TransformationMatrix;
+			// 递归兄弟帧
+			if (currentFrame->pFrameSibling != NULL)
+				UpdateFrameMatrices(currentFrame->pFrameSibling, parentMatrix, update, NULL);
 
-	// 递归兄弟帧
-    if (currentFrame->pFrameSibling != NULL)
-        UpdateFrameMatrices(currentFrame->pFrameSibling, parentMatrix);
-
-	// 递归子帧
-    if (currentFrame->pFrameFirstChild != NULL)
-        UpdateFrameMatrices(currentFrame->pFrameFirstChild, &currentFrame->exCombinedTransformationMatrix);
+			// 递归子帧
+			if (currentFrame->pFrameFirstChild != NULL)
+				UpdateFrameMatrices(currentFrame->pFrameFirstChild, &currentFrame->exCombinedTransformationMatrix, update, NULL);
+		}
 }
 
 // 渲染网格
@@ -210,7 +223,7 @@ void CXFile::Render() const
 		DrawFrame(m_frameRoot);
 }
 
-// 渲染帧
+// 渲染骨骼帧
 void CXFile::DrawFrame(LPD3DXFRAME frame) const
 {
 	// 遍历所有网格容器

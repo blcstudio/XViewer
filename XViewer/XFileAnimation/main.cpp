@@ -41,8 +41,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			case VK_SPACE:
 				gGraphics->NextAnimation();
 			break;
+			// 暂停部分骨骼
 			case 'P':
 				gGraphics->ToggleAnimeRun();
+				break;
+			// 切换到后台备用骨骼
+			case 'C':
+				gGraphics->ToggleModel();
 				break;
 
 			default:

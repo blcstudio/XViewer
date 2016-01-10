@@ -15,6 +15,8 @@ private:
 
 	// 动画相关
 	LPD3DXFRAME                 m_frameRoot;
+	LPD3DXFRAME                 m_frameRootBk;
+	D3DXMATRIX					m_matrixBk;
     LPD3DXANIMATIONCONTROLLER   m_animController;
 	D3DXMESHCONTAINER_EXTENDED* m_firstMesh;
 	unsigned int m_currentAnimationSet;	
@@ -26,6 +28,7 @@ private:
 
 	// 骨骼相关
 	D3DXMATRIX *m_boneMatrices;
+	D3DXMATRIX *m_boneMatricesBk;
 	int m_maxBones;
 	
 	// 3D空间包围球
@@ -34,7 +37,7 @@ private:
 
 	std::string m_filename;
 
-	void UpdateFrameMatrices(const D3DXFRAME *frameBase, const D3DXMATRIX *parentMatrix);
+	void UpdateFrameMatrices(const D3DXFRAME *frameBase, D3DXMATRIX *parentMatrix, bool update, D3DXMATRIX *pauseMatrix);
 	void DrawFrame(LPD3DXFRAME frame) const;
 	void DrawMeshContainer(LPD3DXMESHCONTAINER meshContainerBase, LPD3DXFRAME frameBase) const;
 	void SetupBoneMatrices(D3DXFRAME_EXTENDED *pFrame, LPD3DXMATRIX pParentMatrix);	
@@ -44,7 +47,7 @@ public:
 	~CXFile(void);
 
 	bool Load(const std::string &filename);
-	void FrameMove(float elapsedTime,const D3DXMATRIX *matWorld);
+	void FrameMove(float elapsedTime,D3DXMATRIX *matWorld);
 	
 	void Render() const;
 	void SetAnimationSet(unsigned int index);
@@ -56,5 +59,12 @@ public:
 	std::string GetAnimationSetName(unsigned int index);
 	std::string GetFilename() const {return m_filename;}
 
-	void ToggleAnimeRun() {m_aimeRun = !m_aimeRun;}
+	void ToggleAnimeRun() {
+		m_aimeRun = !m_aimeRun;
+	}
+	void ToggleModel() {
+		//LPD3DXFRAME temp = m_frameRoot;
+		//m_frameRoot = m_frameRootBk;
+		//m_frameRootBk = temp;
+	}
 };

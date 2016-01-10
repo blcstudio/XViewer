@@ -36,6 +36,7 @@ public:
 	CCamera *GetCamera() const;
 	void ToggleControlsDisplay() {m_displayControls = !m_displayControls;}
 	void ToggleAnimeRun() {if(m_entity) m_entity->ToggleAnimeRun();}
+	void ToggleModel() {if(m_entity) m_entity->ToggleModel();}
 
 	void NextAnimation();
 };
